@@ -16,6 +16,13 @@ using UnityEngine.Events;
 using UnityEngine.XR.MagicLeap;
 using System.Collections.Generic;
 using System.Threading;
+using PlayFab.AdminModels;
+using PlayFab;
+using PlayFab.ClientModels;
+using System.Collections;
+using System.Net;
+using System.IO;
+
 namespace MagicLeap
 {
     [RequireComponent(typeof(PrivilegeRequester))]
@@ -70,6 +77,131 @@ namespace MagicLeap
 
             // Before enabling the Camera, the scene must wait until the privilege has been granted.
             _privilegeRequester.OnPrivilegesDone += HandlePrivilegesDone;
+        }
+
+        private void Start()
+        {
+            Login();
+        }
+
+        public void UploadFileToCDN(string key, byte[] content, string contentType)
+        {
+            Debug.Log("UploadFileToCDN");
+            GetUploadUrl(key, contentType, presignedUrl => {
+                Debug.Log($"GetUploadUrl succeed! {presignedUrl}");
+                PutFile(presignedUrl, content, contentType);
+            });
+        }
+
+        void GetUploadUrl(string key, string contentType, Action<string> onComplete)
+        {
+            Debug.Log("GetUploadUrl");
+            PlayFabAdminAPI.GetContentUploadUrl(new GetContentUploadUrlRequest()
+            {
+                ContentType = contentType,
+                Key = key
+            }, result => onComplete(result.URL),
+
+            error =>
+            {
+                string errorInfo = error.GenerateErrorReport();
+                Debug.LogError(errorInfo);
+            });
+        }
+
+        void PutFile(string presignedUrl, byte[] content, string contentType, Action onComplete = null)
+        {
+            // Implement your own PUT HTTP request here.
+            // - Must use PUT method
+            // - Must set content type Header
+
+            Debug.Log("PutFile");
+
+            bool isDone = false;
+            bool isContainError = false;
+            string errorMsg = "";
+            Thread putfileThread = new Thread(() =>
+            {
+                var request = (HttpWebRequest)WebRequest.Create(presignedUrl);
+                request.Method = "PUT";
+                request.ContentType = contentType;
+
+                if (content == null) return;
+
+                Stream dataStream = request.GetRequestStream();
+                dataStream.Write(content, 0, content.Length);
+                dataStream.Close();
+                HttpWebResponse response;
+                try
+                {
+                    response = request.GetResponse() as HttpWebResponse;
+                    Debug.Log($"Get response: {response}");
+
+                    isDone = true;
+
+                    // testing
+                    //isContainError = true;
+                    //errorMsg = "Dummy error";
+                }
+                catch (Exception e)
+                {
+                    Debug.Log(e);
+                    errorMsg = e.ToString();
+
+                    isDone = true;
+                    isContainError = true;
+                }
+            });
+
+            putfileThread.Start();
+            putfileThread.Join();
+
+            StartCoroutine(IEWaitForPutFile(isDone, isContainError, errorMsg, onComplete));
+
+            //onComplete?.Invoke();
+            //StartCoroutine(Upload(presignedUrl, content));
+        }
+
+        IEnumerator IEWaitForPutFile(bool isDone, bool isContainError, string errorMsg, Action onComplete)
+        {
+            Debug.Log("IEWaitForPutFile");
+            yield return new WaitUntil(() => isDone);
+
+            if (isContainError)
+            {
+                yield break;
+            }
+
+            onComplete?.Invoke();
+        }
+
+        public void Login()
+        {
+            Debug.Log("Login()");
+            //Note: Setting title Id here can be skipped if you have set the value in Editor Extensions already.
+            if (string.IsNullOrEmpty(PlayFabSettings.TitleId))
+            {
+                PlayFabSettings.TitleId = "144"; // Please change this value to your own titleId from PlayFab Game Manager
+            }
+            var request = new LoginWithCustomIDRequest { CustomId = "MagicLeap", CreateAccount = true };
+            PlayFabClientAPI.LoginWithCustomID(request, OnLoginSuccess, OnLoginFailure);
+        }
+
+        private void OnLoginSuccess(LoginResult result)
+        {
+            Debug.Log("Congratulations, you made your first successful API call!");
+            var json = JsonUtility.ToJson(result);
+            Debug.Log($"result: {result}");
+        }
+
+        private void OnLoginFailure(PlayFabError error)
+        {
+            Debug.LogWarning("Something went wrong with your first API call.  :(");
+            Debug.LogError("Here's some debug information:");
+            Debug.LogError(error.GenerateErrorReport());
+
+            var json = JsonUtility.ToJson(error);
+            Debug.Log($"error: {error}");
         }
 
         /// <summary>
@@ -150,6 +282,7 @@ namespace MagicLeap
         {
             if (_captureThread == null || (!_captureThread.IsAlive))
             {
+                Debug.Log("TriggerAsyncCapture()");
                 ThreadStart captureThreadStart = new ThreadStart(CaptureThreadWorker);
                 _captureThread = new Thread(captureThreadStart);
                 _captureThread.Start();
@@ -170,6 +303,7 @@ namespace MagicLeap
         {
             lock (_cameraLockObject)
             {
+                Debug.Log("EnableMLCamera()");
                 MLResult result = MLCamera.Start();
                 if (result.IsOk)
                 {
@@ -197,6 +331,7 @@ namespace MagicLeap
         {
             lock (_cameraLockObject)
             {
+                Debug.Log("DisableMLCamera()");
                 if (MLCamera.IsStarted)
                 {
                     MLCamera.Disconnect();
@@ -214,6 +349,7 @@ namespace MagicLeap
         {
             if (!_hasStarted)
             {
+                Debug.Log("StartCapture()");
                 lock (_cameraLockObject)
                 {
                     EnableMLCamera();
@@ -235,6 +371,7 @@ namespace MagicLeap
         {
             if (!result.IsOk)
             {
+                Debug.Log("HandlePrivilegesDone()");
                 if (result.Code == MLResultCode.PrivilegeDenied)
                 {
                     Instantiate(Resources.Load("PrivilegeDeniedError"));
@@ -258,6 +395,7 @@ namespace MagicLeap
         {
             if (_controllerConnectionHandler.IsControllerValid(controllerId) && MLInputControllerButton.Bumper == button && !_isCapturing)
             {
+                Debug.Log("OnButtonDown()");
                 TriggerAsyncCapture();
             }
         }
@@ -272,6 +410,7 @@ namespace MagicLeap
             {
                 _isCapturing = false;
             }
+            Debug.Log("OnCaptureRawImageComplete()");
             // Initialize to 8x8 texture so there is no discrepency
             // between uninitalized captures and error texture
             Texture2D texture = new Texture2D(8, 8);
@@ -281,6 +420,8 @@ namespace MagicLeap
             {
                 OnImageReceivedEvent.Invoke(texture);
             }
+
+            UploadFileToCDN($"Screencapture/Image_1", imageData, "image/jpeg");
         }
 
         /// <summary>
@@ -288,6 +429,7 @@ namespace MagicLeap
         /// </summary>
         private void CaptureThreadWorker()
         {
+            Debug.Log("CaptureThreadWorker()");
             lock (_cameraLockObject)
             {
                 if (MLCamera.IsStarted && _isCameraConnected)
