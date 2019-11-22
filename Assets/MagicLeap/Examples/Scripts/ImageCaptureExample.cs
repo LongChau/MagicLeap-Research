@@ -131,6 +131,12 @@ namespace MagicLeap
                 _doPrivPopup = false;
                 _hasShownPrivPopup = true;
             }
+
+            //@LONG this is for testing
+            if (Input.GetKeyDown(KeyCode.C))
+            {
+                TriggerAsyncCapture();
+            }
         }
         #endregion
 
