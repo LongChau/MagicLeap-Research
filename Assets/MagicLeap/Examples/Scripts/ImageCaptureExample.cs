@@ -16,6 +16,8 @@ using UnityEngine.Events;
 using UnityEngine.XR.MagicLeap;
 using System.Collections.Generic;
 using System.Threading;
+using System.IO;
+
 namespace MagicLeap
 {
     [RequireComponent(typeof(PrivilegeRequester))]
@@ -70,6 +72,35 @@ namespace MagicLeap
 
             // Before enabling the Camera, the scene must wait until the privilege has been granted.
             _privilegeRequester.OnPrivilegesDone += HandlePrivilegesDone;
+        }
+
+        [ContextMenu("TestWriteFile")]
+        private void TestWriteFile()
+        {
+            // Create a texture the size of the screen, RGB24 format
+            int width = Screen.width;
+            int height = Screen.height;
+            Texture2D tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+
+            // Read screen contents into the texture
+            tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            tex.Apply();
+
+            // Encode texture into PNG
+            byte[] bytes = tex.EncodeToJPG();
+            Destroy(tex);
+
+            string path = Path.Combine(Application.persistentDataPath, "ScreenShot");
+            Debug.Log($"<color=blue> {path} </color>");
+
+            if (!File.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+
+            // save that file
+            string filePath = Path.Combine(path, $"SavedScreen_{(int)Time.time}_{DateTime.Now.Second}_{DateTime.Now.Day}.jpeg");
+            File.WriteAllBytes(filePath, bytes);
         }
 
         /// <summary>
@@ -275,6 +306,20 @@ namespace MagicLeap
             {
                 OnImageReceivedEvent.Invoke(texture);
             }
+
+            //--- Save to persistent path ---
+            // save that file
+            string path = Path.Combine(Application.persistentDataPath, "ScreenShot");
+            Debug.Log($"<color=blue> {path} </color>");
+
+            if (!File.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+
+            // save that file
+            string filePath = Path.Combine(path, $"SavedScreen_{(int)Time.time}_{DateTime.Now.Second}_{DateTime.Now.Day}.jpeg");
+            File.WriteAllBytes(filePath, imageData);
         }
 
         /// <summary>
