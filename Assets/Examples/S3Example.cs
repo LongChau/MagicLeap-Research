@@ -58,6 +58,16 @@ namespace AWSSDK.Examples
             GetObjectsListButton.onClick.AddListener(() => { GetObjects(); });
             DeleteObjectButton.onClick.AddListener(() => { DeleteObject(); });
             GetObjectButton.onClick.AddListener(() => { GetObject(); });
+
+            // Need to override this or it gonna be bug
+            AWSConfigs.HttpClient = AWSConfigs.HttpClientOption.UnityWebRequest;
+
+            var loggingConfig = AWSConfigs.LoggingConfig;
+            loggingConfig.LogTo = LoggingOptions.UnityLogger;
+            loggingConfig.LogMetrics = true;
+            loggingConfig.LogResponses = ResponseLoggingOption.Always;
+            loggingConfig.LogResponsesSizeLimit = 4096;
+            loggingConfig.LogMetricsFormat = LogMetricsFormatOption.JSON;
         }
 
         #region private members

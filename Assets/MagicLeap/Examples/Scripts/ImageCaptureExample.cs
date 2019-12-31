@@ -2,7 +2,7 @@
 // ---------------------------------------------------------------------
 // %COPYRIGHT_BEGIN%
 //
-// Copyright (c) 2019 Magic Leap, Inc. All Rights Reserved.
+// Copyright (c) 2018-present, Magic Leap, Inc. All Rights Reserved.
 // Use of this file is governed by the Creator Agreement, located
 // here: https://id.magicleap.com/creator-terms
 //
@@ -50,6 +50,14 @@ namespace MagicLeap
         private object _cameraLockObject = new object();
 
         private PrivilegeRequester _privilegeRequester = null;
+
+        private string filePath = "";
+        private string fileName = "";
+
+        [Serializable]
+        private class Msg_OnCompletedCaptureImage : UnityEvent<string, string> { }
+        [SerializeField]
+        private Msg_OnCompletedCaptureImage OnCompletedCaptureImage;
         #endregion
 
         #region Unity Methods
@@ -74,33 +82,9 @@ namespace MagicLeap
             _privilegeRequester.OnPrivilegesDone += HandlePrivilegesDone;
         }
 
-        [ContextMenu("TestWriteFile")]
-        private void TestWriteFile()
+        private void Start()
         {
-            // Create a texture the size of the screen, RGB24 format
-            int width = Screen.width;
-            int height = Screen.height;
-            Texture2D tex = new Texture2D(width, height, TextureFormat.RGB24, false);
-
-            // Read screen contents into the texture
-            tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            tex.Apply();
-
-            // Encode texture into PNG
-            byte[] bytes = tex.EncodeToJPG();
-            Destroy(tex);
-
-            string path = Path.Combine(Application.persistentDataPath, "ScreenShot");
-            Debug.Log($"<color=blue> {path} </color>");
-
-            if (!File.Exists(path))
-            {
-                Directory.CreateDirectory(path);
-            }
-
-            // save that file
-            string filePath = Path.Combine(path, $"SavedScreen_{(int)Time.time}_{DateTime.Now.Second}_{DateTime.Now.Day}.jpeg");
-            File.WriteAllBytes(filePath, bytes);
+            
         }
 
         /// <summary>
@@ -293,6 +277,8 @@ namespace MagicLeap
         /// <param name="imageData">The raw data of the image.</param>
         private void OnCaptureRawImageComplete(byte[] imageData)
         {
+            Debug.Log("ImageCaptureExample::OnCaptureRawImageComplete()");
+
             lock (_cameraLockObject)
             {
                 _isCapturing = false;
@@ -318,8 +304,23 @@ namespace MagicLeap
             }
 
             // save that file
-            string filePath = Path.Combine(path, $"SavedScreen_{(int)Time.time}_{DateTime.Now.Second}_{DateTime.Now.Day}.jpeg");
+            fileName = $"SavedScreen_{(int)Time.time}_{DateTime.Now.Second}_{DateTime.Now.Day}.jpeg";
+            filePath = Path.Combine(path, fileName);
             File.WriteAllBytes(filePath, imageData);
+
+            Debug.Log($"<color=green> File save into: {filePath} </color>");
+
+            //Invoke("Test", 3f);
+            //NetworkController.Instance.GetListBucket();
+            //NetworkController.Instance.PostObject(filePath, fileName);
+
+            OnCompletedCaptureImage?.Invoke(filePath, fileName);
+        }
+
+        private void Test()
+        {
+            //NetworkController.Instance.GetListBucket();
+            NetworkController.Instance.PostObject(filePath, fileName);
         }
 
         /// <summary>
